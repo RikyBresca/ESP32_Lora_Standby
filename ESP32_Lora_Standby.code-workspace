@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "ESP32_Lora_Standby",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.yaml": "home-assistant"
+		}
+	}
+}
