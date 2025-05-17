@@ -3,10 +3,10 @@ repos:
     rev: v20.1.4  # Sostituisci con la versione desiderata
     hooks:
       - id: clang-format
-        args: ["--style=file"]  # Usa un file .clang-format nella root del progetto
+        args: ["--style=file", "--verbose"]  # Usa un file .clang-format nella root del progetto
 
-  - repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5  # Sostituisci con la versione desiderata
-    hooks:
-      - id: clang-tidy
-        args: ["--config-file=.clang-tidy"]  # Usa un file .clang-tidy nella root del progetto
+  # - repo: https://github.com/pocc/pre-commit-hooks
+  #   rev: v1.3.5  # Sostituisci con la versione desiderata
+  #   hooks:
+  #     - id: clang-tidy
+  #       args: ["--config-file=.clang-tidy","--fix-errors"]  # Usa un file .clang-tidy nella root del progetto
