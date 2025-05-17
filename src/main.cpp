@@ -1,31 +1,73 @@
+/**
+ * @file main.cpp
+ * @brief ESP32 LoRa Standby Example
+ *
+ * This example demonstrates how to use the ESP32 with a LoRa E220 module,
+ * enter deep sleep, and wake up using an external pin (AUX_WAKEUP_PIN).
+ * Upon wakeup, it reads an ADC value, sends it via LoRa, and returns to sleep.
+ */
+
 #include <Arduino.h>
 
-//-- PIN CONFIGURATION --//
-#define WAKEUP_PIN 33                 // Pin to wake up the ESP32
-#define WAKEUP_PIN_MODE INPUT_PULLUP  // Pin mode for the wakeup pin
+#include "LoRa_E220.h"
 
+/**
+ * @def AUX_WAKEUP_PIN
+ * @brief GPIO pin used to wake up ESP32 from deep sleep.
+ */
+#define AUX_WAKEUP_PIN 33
+
+/**
+ * @def ADC_PIN
+ * @brief GPIO pin used for ADC voltage reading.
+ */
+#define ADC_PIN 34
+
+/**
+ * @def E220_TX
+ * @brief GPIO pin connected to E220 TX.
+ */
+#define E220_TX 17
+
+/**
+ * @def E220_RX
+ * @brief GPIO pin connected to E220 RX.
+ */
+#define E220_RX 16
+
+/**
+ * @def E220_AUX
+ * @brief GPIO pin connected to E220 AUX (for library, not for wakeup).
+ */
+#define E220_AUX 4  // AUX per la libreria, NON quello di wakeup
+
+/**
+ * @def E220_M0
+ * @brief GPIO pin connected to E220 M0.
+ */
+#define E220_M0 18
+
+/**
+ * @def E220_M1
+ * @brief GPIO pin connected to E220 M1.
+ */
+#define E220_M1 19
+
+/**
+ * @brief LoRa E220 module instance.
+ */
+LoRa_E220 e220ttl(E220_RX, E220_TX, E220_AUX, E220_M0, E220_M1);
+
+/**
+ * @brief Prints the reason for the last wakeup from deep sleep.
+ */
 void print_wakeup_reason()
 {
-  esp_sleep_wakeup_cause_t wakeup_reason;
-
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   switch (wakeup_reason)
   {
     case ESP_SLEEP_WAKEUP_EXT0:
-      Serial.println("Wakeup caused by external signal using RTC_IO");
-      break;
-    case ESP_SLEEP_WAKEUP_EXT1:
-      Serial.println("Wakeup caused by external signal using RTC_CNTL");
-      break;
-    case ESP_SLEEP_WAKEUP_TIMER:
-      Serial.println("Wakeup caused by timer");
-      break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD:
-      Serial.println("Wakeup caused by touchpad");
-      break;
-    case ESP_SLEEP_WAKEUP_ULP:
-      Serial.println("Wakeup caused by ULP program");
+      Serial.println("Wakeup caused by AUX pin");
       break;
     default:
       Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
@@ -33,28 +75,47 @@ void print_wakeup_reason()
   }
 }
 
+/**
+ * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters
+ * deep sleep.
+ */
 void setup()
 {
   Serial.begin(115200);
   while (!Serial)
   {
-    ;  // wait for serial port to connect. Needed for native USB port only
+    ;
   }
-  pinMode(WAKEUP_PIN, INPUT_PULLUP);
-  print_wakeup_reason();  // Print the reason for waking up
-  Serial.println("Configuring wakeup pin...");
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKEUP_PIN,
-                               0);  // Enable wakeup on the specified pin (active low)
-  // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT0); // Disable the wakeup source to prevent
-  // immediate wakeup
-  Serial.println("Starting...");
+  pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);
+  print_wakeup_reason();
+  Serial.println("Configuring AUX wakeup pin...");
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)AUX_WAKEUP_PIN, 0);
+
+  e220ttl.begin();
+
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0)
+  {
+    int adcValue = analogRead(ADC_PIN);
+    float voltage = adcValue * (3.3 / 4095.0);
+    Serial.print("ADC Voltage: ");
+    Serial.println(voltage);
+
+    String msg = String("V:") + String(voltage, 2);
+    ResponseStatus rs = e220ttl.sendFixedMessage(0, 3, 0x01, msg.c_str(), msg.length());
+    Serial.print("Send status: ");
+    Serial.println(rs.getResponseDescription());
+    delay(100);
+  }
+
+  Serial.println("Entering deep sleep mode...");
+  delay(100);
+  esp_deep_sleep_start();
 }
 
+/**
+ * @brief Arduino loop function. Not used in this example.
+ */
 void loop()
 {
-  // Test Sleep mode
-  Serial.println("Sleeping for 5 seconds...");
-  delay(5000);
-  Serial.println("Entering deep sleep mode...");
-  esp_deep_sleep_start();  // Enter deep sleep mode
+  // Vuoto
 }
