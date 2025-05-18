@@ -53,10 +53,12 @@
  */
 #define E220_M1 19
 
+#define MESSAGE_TO_CHECK "START 1"
+
 /**
  * @brief LoRa E220 module instance.
  */
-LoRa_E220 e220ttl(E220_RX, E220_TX, E220_AUX, E220_M0, E220_M1);
+LoRa_E220 e220ttl(&Serial2, E220_AUX, E220_M0, E220_M1);
 
 /**
  * @brief Prints the reason for the last wakeup from deep sleep.
@@ -86,22 +88,65 @@ void setup()
   {
     ;
   }
-  pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);
+  pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);  ///< Configure AUX_WAKEUP_PIN as input with pull-up
   print_wakeup_reason();
   Serial.println("Configuring AUX wakeup pin...");
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)AUX_WAKEUP_PIN, 0);
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)AUX_WAKEUP_PIN,
+                               0);  ///< Enable external wakeup on AUX_WAKEUP_PIN
 
-  e220ttl.begin();
+  // Initialize E220 module
+  Serial.println("Initializing E220 module...");
+  e220ttl.begin();  ///< Initialize the E220 LoRa module
+  delay(1000);
+  Serial.println("E220 module initialized.");
 
+  pinMode(12, OUTPUT);    ///< Set pin 12 as OUTPUT for command action
+  digitalWrite(12, LOW);  ///< Ensure pin 12 is LOW at startup
+
+  // Check the wakeup cause
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0)
   {
-    int adcValue = analogRead(ADC_PIN);
-    float voltage = adcValue * (3.3 / 4095.0);
+    // Read message from E220
+    if (e220ttl.available() > 1)
+    {
+      Serial.println("E220 message received!");
+      Serial.println("Reading message from E220...");
+      ResponseContainer rc = e220ttl.receiveMessage();  ///< Receive message from E220
+
+      // Check if the message is received successfully
+      if (rc.status.code != 1)
+      {
+        Serial.println(rc.status.getResponseDescription());
+      }
+      else
+      {
+        Serial.print("Received message: ");
+        Serial.println(rc.status.getResponseDescription());
+        Serial.println(rc.data);
+
+        /**
+         * @brief If the received data is "START 1", set pin 12 HIGH for 500ms.
+         */
+        if (String(rc.data) == MESSAGE_TO_CHECK)
+        {
+          Serial.println("Command START 1 received: setting pin 12 HIGH");
+          digitalWrite(12, HIGH);  ///< Set pin 12 HIGH
+          delay(500);              ///< Keep pin 12 HIGH for 500ms
+          digitalWrite(12, LOW);   ///< Set pin 12 LOW
+        }
+      }
+    }
+
+    // In this case send anyway the voltage value
+    //  Send ADC voltage value via E220
+    int adcValue = analogRead(ADC_PIN);         ///< Read ADC value from ADC_PIN
+    float voltage = adcValue * (3.3 / 4095.0);  ///< Convert ADC value to voltage
     Serial.print("ADC Voltage: ");
     Serial.println(voltage);
 
-    String msg = String("V:") + String(voltage, 2);
-    ResponseStatus rs = e220ttl.sendFixedMessage(0, 3, 0x01, msg.c_str(), msg.length());
+    String msg = String("V:") + String(voltage, 2);  ///< Prepare voltage message
+    ResponseStatus rs = e220ttl.sendFixedMessage(0, 3, 0x01, msg.c_str(),
+                                                 msg.length());  ///< Send voltage message via E220
     Serial.print("Send status: ");
     Serial.println(rs.getResponseDescription());
     delay(100);
@@ -109,7 +154,7 @@ void setup()
 
   Serial.println("Entering deep sleep mode...");
   delay(100);
-  esp_deep_sleep_start();
+  esp_deep_sleep_start();  ///< Enter deep sleep mode
 }
 
 /**
