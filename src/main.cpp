@@ -53,6 +53,28 @@
  */
 #define E220_M1 19
 
+/**
+ * @def E220_ADDH
+ * @brief Address High byte for E220 module.
+ */
+#define E220_ADDH 0x00
+
+/**
+ * @def E220_ADDL
+ * @brief Address Low byte for E220 module.
+ */
+#define E220_ADDL 0x03
+
+/**
+ * @def E220_CH
+ * @brief Communication channel for E220 module.
+ */
+#define E220_CH 23
+
+/**
+ * @def MESSAGE_TO_CHECK
+ * @brief Message to check for in the received data.
+ */
 #define MESSAGE_TO_CHECK "START 1"
 
 /**
@@ -63,19 +85,14 @@ LoRa_E220 e220ttl(&Serial2, E220_AUX, E220_M0, E220_M1);
 /**
  * @brief Prints the reason for the last wakeup from deep sleep.
  */
-void print_wakeup_reason()
-{
-  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-  switch (wakeup_reason)
-  {
-    case ESP_SLEEP_WAKEUP_EXT0:
-      Serial.println("Wakeup caused by AUX pin");
-      break;
-    default:
-      Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
-      break;
-  }
-}
+void print_wakeup_reason();
+
+/**
+ * @brief Prints the parameters of the E220 module configuration.
+ *
+ * @param configuration The configuration structure to print.
+ */
+void printParameters(struct Configuration configuration);
 
 /**
  * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters
@@ -84,11 +101,17 @@ void print_wakeup_reason()
 void setup()
 {
   Serial.begin(115200);
+  // Serial2.begin(9600, SERIAL_8N1, E220_RX, E220_TX);  ///< Initialize Serial2 for E220
+  // communication
   while (!Serial)
   {
     ;
   }
+  // Pin configuration
   pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);  ///< Configure AUX_WAKEUP_PIN as input with pull-up
+  pinMode(12, OUTPUT);                    ///< Set pin 12 as OUTPUT for command action
+  digitalWrite(12, LOW);                  ///< Ensure pin 12 is LOW at startup
+
   print_wakeup_reason();
   Serial.println("Configuring AUX wakeup pin...");
   esp_sleep_enable_ext0_wakeup((gpio_num_t)AUX_WAKEUP_PIN,
@@ -100,8 +123,36 @@ void setup()
   delay(1000);
   Serial.println("E220 module initialized.");
 
-  pinMode(12, OUTPUT);    ///< Set pin 12 as OUTPUT for command action
-  digitalWrite(12, LOW);  ///< Ensure pin 12 is LOW at startup
+  // E220 configuration
+  Serial.println("Configuring E220 module...");
+  ResponseStructContainer c;
+  c = e220ttl.getConfiguration();
+
+  // It's important get configuration pointer before all other operation
+  Configuration configuration = *(Configuration*)c.data;
+  Serial.println(c.status.getResponseDescription());
+  Serial.println(c.status.code);
+
+  printParameters(configuration);
+
+  configuration.ADDL = E220_ADDL;  // First part of address
+  configuration.ADDH = E220_ADDL;  // Second part
+
+  configuration.CHAN = E220_CH;  // Communication channel
+
+  // Set configuration changed and set to not hold the configuration
+  ResponseStatus rs = e220ttl.setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
+  Serial.println(rs.getResponseDescription());
+  Serial.println(rs.code);
+
+  c = e220ttl.getConfiguration();
+  // It's important get configuration pointer before all other operation
+  configuration = *(Configuration*)c.data;
+  Serial.println(c.status.getResponseDescription());
+  Serial.println(c.status.code);
+
+  printParameters(configuration);
+  c.close();
 
   // Check the wakeup cause
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0)
@@ -163,4 +214,85 @@ void setup()
 void loop()
 {
   // Vuoto
+}
+
+void printParameters(struct Configuration configuration)
+{
+  DEBUG_PRINTLN("----------------------------------------");
+
+  DEBUG_PRINT(F("HEAD : "));
+  DEBUG_PRINT(configuration.COMMAND, HEX);
+  DEBUG_PRINT(" ");
+  DEBUG_PRINT(configuration.STARTING_ADDRESS, HEX);
+  DEBUG_PRINT(" ");
+  DEBUG_PRINTLN(configuration.LENGHT, HEX);
+  DEBUG_PRINTLN(F(" "));
+  DEBUG_PRINT(F("AddH : "));
+  DEBUG_PRINTLN(configuration.ADDH, HEX);
+  DEBUG_PRINT(F("AddL : "));
+  DEBUG_PRINTLN(configuration.ADDL, HEX);
+  DEBUG_PRINTLN(F(" "));
+  DEBUG_PRINT(F("Chan : "));
+  DEBUG_PRINT(configuration.CHAN, DEC);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.getChannelDescription());
+  DEBUG_PRINTLN(F(" "));
+  DEBUG_PRINT(F("SpeedParityBit     : "));
+  DEBUG_PRINT(configuration.SPED.uartParity, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.SPED.getUARTParityDescription());
+  DEBUG_PRINT(F("SpeedUARTDatte     : "));
+  DEBUG_PRINT(configuration.SPED.uartBaudRate, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.SPED.getUARTBaudRateDescription());
+  DEBUG_PRINT(F("SpeedAirDataRate   : "));
+  DEBUG_PRINT(configuration.SPED.airDataRate, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.SPED.getAirDataRateDescription());
+  DEBUG_PRINTLN(F(" "));
+  DEBUG_PRINT(F("OptionSubPacketSett: "));
+  DEBUG_PRINT(configuration.OPTION.subPacketSetting, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.OPTION.getSubPacketSetting());
+  DEBUG_PRINT(F("OptionTranPower    : "));
+  DEBUG_PRINT(configuration.OPTION.transmissionPower, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.OPTION.getTransmissionPowerDescription());
+  DEBUG_PRINT(F("OptionRSSIAmbientNo: "));
+  DEBUG_PRINT(configuration.OPTION.RSSIAmbientNoise, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.OPTION.getRSSIAmbientNoiseEnable());
+  DEBUG_PRINTLN(F(" "));
+  DEBUG_PRINT(F("TransModeWORPeriod : "));
+  DEBUG_PRINT(configuration.TRANSMISSION_MODE.WORPeriod, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.TRANSMISSION_MODE.getWORPeriodByParamsDescription());
+  DEBUG_PRINT(F("TransModeEnableLBT : "));
+  DEBUG_PRINT(configuration.TRANSMISSION_MODE.enableLBT, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.TRANSMISSION_MODE.getLBTEnableByteDescription());
+  DEBUG_PRINT(F("TransModeEnableRSSI: "));
+  DEBUG_PRINT(configuration.TRANSMISSION_MODE.enableRSSI, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.TRANSMISSION_MODE.getRSSIEnableByteDescription());
+  DEBUG_PRINT(F("TransModeFixedTrans: "));
+  DEBUG_PRINT(configuration.TRANSMISSION_MODE.fixedTransmission, BIN);
+  DEBUG_PRINT(" -> ");
+  DEBUG_PRINTLN(configuration.TRANSMISSION_MODE.getFixedTransmissionDescription());
+
+  DEBUG_PRINTLN("----------------------------------------");
+}
+
+void print_wakeup_reason()
+{
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  switch (wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0:
+      Serial.println("Wakeup caused by AUX pin");
+      break;
+    default:
+      Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+      break;
+  }
 }
