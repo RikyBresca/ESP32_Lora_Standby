@@ -136,7 +136,7 @@ void setup()
   printParameters(configuration);
 
   configuration.ADDL = E220_ADDL;  // First part of address
-  configuration.ADDH = E220_ADDL;  // Second part
+  configuration.ADDH = E220_ADDH;  // Second part
 
   configuration.CHAN = E220_CH;  // Communication channel
 
