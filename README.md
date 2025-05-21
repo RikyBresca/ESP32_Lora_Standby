@@ -21,6 +21,7 @@ This project demonstrates how to use an ESP32 with a LoRa E220 module to send da
   - `E220_AUX`: GPIO 4 (AUX for the library)
   - `E220_M0`: GPIO 18
   - `E220_M1`: GPIO 19
+NOTE: set right RX and TX for serial
 
 ## Wiring Table
 
