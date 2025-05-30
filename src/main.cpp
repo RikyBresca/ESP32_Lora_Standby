@@ -10,6 +10,7 @@
 #include <Arduino.h>
 
 #include "LoRa_E220.h"
+#include "esp_sleep.h"
 
 /**
  * @def AUX_WAKEUP_PIN
@@ -27,31 +28,31 @@
  * @def E220_TX
  * @brief GPIO pin connected to E220 TX.
  */
-#define E220_TX 17
+#define E220_TX 20
 
 /**
  * @def E220_RX
  * @brief GPIO pin connected to E220 RX.
  */
-#define E220_RX 16
+#define E220_RX 21
 
 /**
  * @def E220_AUX
  * @brief GPIO pin connected to E220 AUX (for library, not for wakeup).
  */
-#define E220_AUX 4  // AUX per la libreria, NON quello di wakeup
+#define E220_AUX 10  // AUX per la libreria, NON quello di wakeup
 
 /**
  * @def E220_M0
  * @brief GPIO pin connected to E220 M0.
  */
-#define E220_M0 18
+#define E220_M0 9
 
 /**
  * @def E220_M1
  * @brief GPIO pin connected to E220 M1.
  */
-#define E220_M1 19
+#define E220_M1 8
 
 /**
  * @def E220_ADDH
@@ -80,7 +81,7 @@
 /**
  * @brief LoRa E220 module instance.
  */
-LoRa_E220 e220ttl(&Serial2, E220_AUX, E220_M0, E220_M1);
+LoRa_E220 e220ttl(&Serial1, E220_AUX, E220_M0, E220_M1);
 
 /**
  * @brief Prints the reason for the last wakeup from deep sleep.
@@ -101,7 +102,7 @@ void printParameters(struct Configuration configuration);
 void setup()
 {
   Serial.begin(115200);
-  // Serial2.begin(9600, SERIAL_8N1, E220_RX, E220_TX);  ///< Initialize Serial2 for E220
+
   // communication
   while (!Serial)
   {
@@ -114,8 +115,9 @@ void setup()
 
   print_wakeup_reason();
   Serial.println("Configuring AUX wakeup pin...");
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)AUX_WAKEUP_PIN,
-                               0);  ///< Enable external wakeup on AUX_WAKEUP_PIN
+  esp_deep_sleep_enable_gpio_wakeup(
+      (1ULL << AUX_WAKEUP_PIN),
+      ESP_GPIO_WAKEUP_GPIO_LOW);  ///< Enable external wakeup on AUX_WAKEUP_PIN
 
   // Initialize E220 module
   Serial.println("Initializing E220 module...");
