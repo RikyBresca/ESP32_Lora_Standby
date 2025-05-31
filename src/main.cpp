@@ -157,7 +157,7 @@ void setup()
     send_fnc_lora_e220();  ///< Call the function to send data via E220
 #endif
   }
-  add else
+  else
   {
     while (1) }
 }
