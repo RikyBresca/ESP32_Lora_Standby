@@ -22,7 +22,7 @@
  * @brief Uncomment to enable LoRa receive mode.
  * Comment to enable LoRa send mode.
  */
-#define LORA_RECEIVE
+// #define LORA_RECEIVE
 
 /**
  * @def AUX_WAKEUP_PIN
@@ -76,8 +76,21 @@
  * @def E220_ADDL
  * @brief Address Low byte for E220 module.
  */
+#ifdef LORA_RECEIVE
 #define E220_ADDL 0x03
+#else
+#define E220_ADDL 0x01
+#endif
 
+/**
+ * @def E220_ADDH_RX
+ * @brief Address High byte for receiving E220 module.
+ */
+#ifdef LORA_RECEIVE
+#define E220_ADDL_RX 0x01  // Address High byte for receiving E220 module
+#else
+#define E220_ADDL_RX 0x03  // Address High byte for receiving E220 module
+#endif
 /**
  * @def E220_CH
  * @brief Communication channel for E220 module.
@@ -114,14 +127,14 @@ void printParameters(struct Configuration configuration);
  *
  * @param e220 Reference to the LoRa_E220 instance.
  */
-void receive_fnc_lora_e220(LoRa_E220 &e220);
+void receive_fnc_lora_e220();
 
 /**
  * @brief Function to send data via the E220 module.
  *
  * @param e220 Reference to the LoRa_E220 instance.
  */
-void send_fnc_lora_e220(LoRa_E220 &e220);
+void send_fnc_lora_e220();
 
 /**
  * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters
@@ -136,12 +149,17 @@ void setup()
   {
     ;
   }
-
-#ifdef LORA_RECEIVE                // If LORA_RECEIVE is defined, we will receive data
-  receive_fnc_lora_e220(e220ttl);  ///< Call the function to receive data from E220
-#else                              // If LORA_RECEIVE is not defined, we will send data
-  send_fnc_lora_e220(e220ttl);  ///< Call the function to send data via E220
+  if (e220_init())
+  {
+#ifdef LORA_RECEIVE           // If LORA_RECEIVE is defined, we will receive data
+    receive_fnc_lora_e220();  ///< Call the function to receive data from E220
+#else                         // If LORA_RECEIVE is not defined, we will send data
+    send_fnc_lora_e220();  ///< Call the function to send data via E220
 #endif
+  }
+  add else
+  {
+    while (1) }
 }
 
 /**
@@ -191,7 +209,7 @@ void loop()
   // This example does not implement sending in the loop.
   Serial.println("Send data via E220...");
   String msg = MESSAGE_TO_CHECK;  ///< Prepare voltage message
-  ResponseStatus rs = e220ttl.sendFixedMessage(0, 3, 0x01, msg.c_str(),
+  ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, E220_ADDL_RX, E220_CH, msg.c_str(),
                                                msg.length());  ///< Send voltage message via E220
   Serial.print("Send status: ");
   Serial.println(rs.getResponseDescription());
@@ -292,7 +310,7 @@ extern "C" void app_main()
 }
 
 // Receive functions
-void receive_fnc_lora_e220(LoRa_E220 &e220)
+void receive_fnc_lora_e220()
 {
   // Pin configuration
   pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);  ///< Configure AUX_WAKEUP_PIN as input with pull-up
@@ -306,51 +324,6 @@ void receive_fnc_lora_e220(LoRa_E220 &e220)
       (1ULL << AUX_WAKEUP_PIN),
       ESP_GPIO_WAKEUP_GPIO_LOW);  ///< Enable external wakeup on AUX_WAKEUP_PIN
 #endif
-  // Initialize E220 module
-  Serial.println("Initializing E220 module...");
-  if (e220ttl.begin())
-  {  ///< Initialize the E220 LoRa module
-    delay(1000);
-    Serial.println("E220 module initialized.");
-  }
-  else
-  {
-    Serial.println("Failed to initialize E220 module.");
-    return;
-  }
-
-  // E220 configuration
-  Serial.println("Configuring E220 module...");
-  ResponseStructContainer c;
-  c = e220ttl.getConfiguration();
-
-  // It's important get configuration pointer before all other operation
-  Configuration configuration = *(Configuration *)c.data;
-  Serial.println(c.status.getResponseDescription());
-  Serial.println(c.status.code);
-
-  printParameters(configuration);
-
-  configuration.ADDL = E220_ADDL;  // First part of address
-  configuration.ADDH = E220_ADDH;  // Second part
-
-  configuration.CHAN = E220_CH;  // Communication channel
-
-  // Set configuration changed and set to not hold the configuration
-  ResponseStatus rs = e220ttl.setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
-  Serial.println(rs.getResponseDescription());
-  Serial.println(rs.code);
-
-  c = e220ttl.getConfiguration();
-  // It's important get configuration pointer before all other operation
-  configuration = *(Configuration *)c.data;
-  Serial.println(c.status.getResponseDescription());
-  Serial.println(c.status.code);
-  Serial.println("Configuration: ");
-  printParameters(configuration);
-  Serial.println("E220 module configured successfully.");
-  delay(1000);
-  c.close();
 
   // Check the wakeup cause
 #ifdef ESP32_SLEEP_WAKEUP_EXT0
@@ -398,7 +371,7 @@ void receive_fnc_lora_e220(LoRa_E220 &e220)
     Serial.println(voltage);
 
     String msg = String("V:") + String(voltage, 2);  ///< Prepare voltage message
-    ResponseStatus rs = e220ttl.sendFixedMessage(0, 3, 0x01, msg.c_str(),
+    ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, E220_ADDL_RX, E220_CH, msg.c_str(),
                                                  msg.length());  ///< Send voltage message via E220
     Serial.print("Send status: ");
     Serial.println(rs.getResponseDescription());
@@ -413,7 +386,7 @@ void receive_fnc_lora_e220(LoRa_E220 &e220)
 }
 
 // Send functions
-void send_fnc_lora_e220(LoRa_E220 &e220)
+void send_fnc_lora_e220()
 {
   // Initialize E220 module
   Serial.println("Initializing E220 module...");
@@ -427,4 +400,54 @@ void send_fnc_lora_e220(LoRa_E220 &e220)
     Serial.println("Failed to initialize E220 module.");
     return;
   }
+}
+
+bool e220_init()
+{
+  // Initialize E220 module
+  Serial.println("Initializing E220 module...");
+  if (e220ttl.begin())
+  {  ///< Initialize the E220 LoRa module
+    delay(1000);
+    Serial.println("E220 module initialized.");
+  }
+  else
+  {
+    Serial.println("Failed to initialize E220 module.");
+    return false;
+  }
+
+  // E220 configuration
+  Serial.println("Configuring E220 module...");
+  ResponseStructContainer c;
+  c = e220ttl.getConfiguration();
+
+  // It's important get configuration pointer before all other operation
+  Configuration configuration = *(Configuration *)c.data;
+  Serial.println(c.status.getResponseDescription());
+  Serial.println(c.status.code);
+
+  printParameters(configuration);
+
+  configuration.ADDL = E220_ADDL;  // First part of address
+  configuration.ADDH = E220_ADDH;  // Second part
+
+  configuration.CHAN = E220_CH;  // Communication channel
+
+  // Set configuration changed and set to not hold the configuration
+  ResponseStatus rs = e220ttl.setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
+  Serial.println(rs.getResponseDescription());
+  Serial.println(rs.code);
+
+  c = e220ttl.getConfiguration();
+  // It's important get configuration pointer before all other operation
+  configuration = *(Configuration *)c.data;
+  Serial.println(c.status.getResponseDescription());
+  Serial.println(c.status.code);
+  Serial.println("Configuration: ");
+  printParameters(configuration);
+  Serial.println("E220 module configured successfully.");
+  delay(1000);
+  c.close();
+  return true;
 }
