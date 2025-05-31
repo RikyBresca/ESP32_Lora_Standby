@@ -14,26 +14,26 @@ This project demonstrates how to use an ESP32 with a LoRa E220 module to send da
 - ESP32 Dev Board
 - LoRa E220 module (E220-900T22S or similar)
 - GPIO connections:
-  - `AUX_WAKEUP_PIN`: GPIO 33 (input for wakeup)
-  - `ADC_PIN`: GPIO 34 (analog reading)
-  - `E220_TX`: GPIO 17
-  - `E220_RX`: GPIO 16
-  - `E220_AUX`: GPIO 4 (AUX for the library)
-  - `E220_M0`: GPIO 18
-  - `E220_M1`: GPIO 19
-NOTE: set right RX and TX for serial
+  - `AUX_WAKEUP_PIN`: GPIO 3 (input for wakeup)
+  - `ADC_PIN`: GPIO 4 (analog reading)
+  - `E220_TX`: GPIO 20
+  - `E220_RX`: GPIO 21
+  - `E220_AUX`: GPIO 10 (AUX for the library)
+  - `E220_M0`: GPIO 8
+  - `E220_M1`: GPIO 9
+    NOTE: set right RX and TX for serial
 
 ## Wiring Table
 
 | ESP32 GPIO | E220 Pin     |
 | ---------- | ------------ |
-| 17         | RX           |
-| 16         | TX           |
-| 4          | AUX          |
-| 18         | M0           |
-| 19         | M1           |
-| 33         | Wakeup Input |
-| 34         | ADC Input    |
+| 20         | RX           |
+| 21         | TX           |
+| 10         | AUX          |
+| 9          | M0           |
+| 8          | M1           |
+| 4          | Wakeup Input |
+| 3          | ADC Input    |
 
 ## Dependencies
 
@@ -58,6 +58,10 @@ NOTE: set right RX and TX for serial
 ## Pre-commit
 
 The repository includes a `.pre-commit-config.yaml` for automatic formatting of C++ code (`clang-format`) and Markdown files (`prettier`).
+
+## DEBUG
+
+To debug `ESP32-C3` it is needed to install driver and ESP TOOL. [Download here](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/windows-setup.html#get-started-windows-tools-installer)
 
 ## License
 
