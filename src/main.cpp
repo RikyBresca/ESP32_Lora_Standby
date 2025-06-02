@@ -10,6 +10,7 @@
 // Frequency band definition
 //  Uncomment the following line to use the 433 MHz frequency band
 // #define FREQUENCY_868
+// #define LoRa_E220_DEBUG
 
 #include <Arduino.h>
 #include <sdkconfig.h>
@@ -18,8 +19,8 @@
 #include "esp_sleep.h"
 
 // Define the device type
-#define SENDER_DEVICE  // Uncomment this line for sender device
-// #define RECEIVE_DEVICE  // Uncomment this line for receiver device
+// #define SENDER_DEVICE  // Uncomment this line for sender device
+#define RECEIVE_DEVICE  // Uncomment this line for receiver device
 
 // Ensure only one device type is defined
 #if defined(SENDER_DEVICE) && defined(RECEIVE_DEVICE)
@@ -153,6 +154,15 @@ void setup_receive_fnc_lora_e220();
 void loop_sender_fnc_lora_e220();
 void setup_sender_fnc_lora_e220();
 #endif
+
+struct Message
+{
+  uint8_t ADDH;  // Address High byte
+  uint8_t ADDL;  // Address Low byte
+  uint8_t CHAN;  // Communication channel
+  char message[10];
+};
+
 /**
  * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters
  * deep sleep.
@@ -292,9 +302,9 @@ void setup_receive_fnc_lora_e220()
   configuration.OPTION.RSSIAmbientNoise = RSSI_AMBIENT_NOISE_DISABLED;  // Need to send special command
   configuration.OPTION.transmissionPower = POWER_22;                    // Device power
 
-  configuration.TRANSMISSION_MODE.enableRSSI = RSSI_DISABLED;                       // Enable RSSI info
-  configuration.TRANSMISSION_MODE.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;  // Enable repeater mode
-  configuration.TRANSMISSION_MODE.enableLBT = LBT_DISABLED;                         // Check interfere
+  configuration.TRANSMISSION_MODE.enableRSSI = RSSI_DISABLED;                 // Enable RSSI info
+  configuration.TRANSMISSION_MODE.fixedTransmission = FT_FIXED_TRANSMISSION;  // Enable repeater mode
+  configuration.TRANSMISSION_MODE.enableLBT = LBT_DISABLED;                   // Check interfere
   ResponseStatus rs = e220ttl.setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
   Serial.println(rs.getResponseDescription());
   Serial.println(rs.code);
@@ -320,11 +330,7 @@ void loop_receive_fnc_lora_e220()
     Serial.println("Message received!");
 
     // read the String message
-#ifdef ENABLE_RSSI
-    ResponseContainer rc = e220ttl.receiveMessageRSSI();
-#else
-    ResponseContainer rc = e220ttl.receiveMessage();
-#endif
+    ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
     // Is something goes wrong print error
     if (rc.status.code != 1)
     {
@@ -332,13 +338,22 @@ void loop_receive_fnc_lora_e220()
     }
     else
     {
-      // Print the data received
+      Message receivedMessage = *(Message*)rc.data;
+      // Print the received data
       Serial.println(rc.status.getResponseDescription());
-      Serial.println(rc.data);
-#ifdef ENABLE_RSSI
-      Serial.print("RSSI: ");
-      Serial.println(rc.rssi, DEC);
-#endif
+      Serial.print("Data: ");
+      Serial.println(receivedMessage.message);
+      Serial.print("From ADDH: ");
+      Serial.print(receivedMessage.ADDH, HEX);
+      Serial.print(" ADDL: ");
+      Serial.println(receivedMessage.ADDL, HEX);
+      Serial.print("Channel: ");
+      Serial.println(receivedMessage.CHAN, HEX);
+
+      // Esempio di risposta al mittente
+      String risposta = "ACK";
+      e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, risposta);
+      Serial.println("Risposta inviata!");
     }
   }
   delay(100);
@@ -371,9 +386,9 @@ void setup_sender_fnc_lora_e220()
   configuration.OPTION.RSSIAmbientNoise = RSSI_AMBIENT_NOISE_DISABLED;  // Need to send special command
   configuration.OPTION.transmissionPower = POWER_22;                    // Device power
 
-  configuration.TRANSMISSION_MODE.enableRSSI = RSSI_DISABLED;                       // Enable RSSI info
-  configuration.TRANSMISSION_MODE.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;  // Enable repeater mode
-  configuration.TRANSMISSION_MODE.enableLBT = LBT_DISABLED;                         // Check interfere
+  configuration.TRANSMISSION_MODE.enableRSSI = RSSI_DISABLED;                 // Enable RSSI info
+  configuration.TRANSMISSION_MODE.fixedTransmission = FT_FIXED_TRANSMISSION;  // Enable repeater mode
+  configuration.TRANSMISSION_MODE.enableLBT = LBT_DISABLED;                   // Check interfere
   ResponseStatus rs = e220ttl.setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
   Serial.println(rs.getResponseDescription());
   Serial.println(rs.code);
@@ -392,19 +407,48 @@ void setup_sender_fnc_lora_e220()
 
 void loop_sender_fnc_lora_e220()
 {
-  String input = "TEST MESSAGE";
-  ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, E220_CH, input);
+  Message message = {E220_ADDH, E220_ADDL, E220_CH, "Hello"};
+
+  ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, DESTINATION_ADDL, E220_CH, &message, sizeof(message));
+
   // Check If there is some problem of succesfully send
   Serial.println(rs.getResponseDescription());
 
   // Print info about the message sent
   Serial.print("Message sent: ");
-  Serial.println(input);
+  Serial.println(message.message);
   Serial.print("Destination Address: ");
   Serial.println(DESTINATION_ADDL, HEX);
   Serial.print("Channel: ");
   Serial.println(E220_CH, DEC);
+  delay(500);  // Delay to avoid flooding the serial output
 
-  delay(1000);  // Delay to avoid flooding the serial output
+  if (e220ttl.available() > 1)
+  {
+    Serial.println("Message received!");
+
+    // read the String message
+    ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(message));
+    // Is something goes wrong print error
+    if (rc.status.code != 1)
+    {
+      Serial.println(rc.status.getResponseDescription());
+    }
+    else
+    {
+      Message receivedMessage = *(Message*)rc.data;
+      // Print the received data
+      Serial.println(rc.status.getResponseDescription());
+      Serial.print("Data: ");
+      Serial.println(receivedMessage.message);
+      Serial.print("From ADDH: ");
+      Serial.print(receivedMessage.ADDH, HEX);
+      Serial.print(" ADDL: ");
+      Serial.println(receivedMessage.ADDL, HEX);
+      Serial.print("Channel: ");
+      Serial.println(receivedMessage.CHAN, HEX);
+    }
+    delay(500);  // Delay to avoid flooding the serial output
+  }
 }
 #endif
