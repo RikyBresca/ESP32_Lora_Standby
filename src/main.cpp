@@ -23,6 +23,7 @@
 #define TEST_MODE  // Uncomment this line to enable test mode for sender device
 
 #define RECEIVE_DEVICE  // Uncomment this line for receiver device
+// #define ENABLE_SLEEP  // Uncomment this line to enable deep sleep functionality
 
 // Ensure only one device type is defined
 #if defined(SENDER_DEVICE) && defined(RECEIVE_DEVICE)
@@ -220,7 +221,9 @@ void setup()
   Serial.println(F("LoRa E220 MODE - " PRINT_MODE));
 #if defined(RECEIVE_DEVICE)
   setup_receive_fnc_lora_e220();
+#if defined(ENABLE_SLEEP)
   setup_receive_sleep();  // Setup for deep sleep mode
+#endif
 #elif defined(SENDER_DEVICE)
   setup_sender_fnc_lora_e220();
 #endif
@@ -233,7 +236,9 @@ void loop()
 {
 #if defined(RECEIVE_DEVICE)
   loop_receive_fnc_lora_e220();
+#if defined(ENABLE_SLEEP)
   loop_receive_sleep();  // Enter deep sleep after processing
+#endif
 #elif defined(SENDER_DEVICE)
   loop_sender_fnc_lora_e220();
 #endif
