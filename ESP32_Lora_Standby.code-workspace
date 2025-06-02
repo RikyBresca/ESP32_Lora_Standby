@@ -1,21 +1,21 @@
 {
 	"folders": [
 		{
-			"name": "ESP32_Lora_Standby",
 			"path": "."
 		}
 	],
 	"settings": {
 		"files.associations": {
-			"*.yaml": "home-assistant",
 			"array": "cpp",
 			"deque": "cpp",
+			"list": "cpp",
 			"string": "cpp",
 			"unordered_map": "cpp",
 			"unordered_set": "cpp",
 			"vector": "cpp",
 			"string_view": "cpp",
-			"initializer_list": "cpp"
+			"initializer_list": "cpp",
+			"system_error": "cpp"
 		}
 	}
 }

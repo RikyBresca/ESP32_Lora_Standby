@@ -19,8 +19,8 @@
 #include "esp_sleep.h"
 
 // Define the device type
-// #define SENDER_DEVICE  // Uncomment this line for sender device
-#define RECEIVE_DEVICE  // Uncomment this line for receiver device
+#define SENDER_DEVICE  // Uncomment this line for sender device
+// #define RECEIVE_DEVICE  // Uncomment this line for receiver device
 
 // Ensure only one device type is defined
 #if defined(SENDER_DEVICE) && defined(RECEIVE_DEVICE)
@@ -46,7 +46,7 @@
  * @def AUX_WAKEUP_PIN
  * @brief GPIO pin used to wake up ESP32 from deep sleep.
  */
-#define AUX_WAKEUP_PIN 3
+#define AUX_WAKEUP_PIN 0
 
 /**
  * @def ADC_PIN
@@ -95,7 +95,7 @@
  * @brief Address Low byte for E220 module.
  */
 #if defined(SENDER_DEVICE)
-#define E220_ADDL 0x03
+#define E220_ADDL 0x00
 #elif defined(RECEIVE_DEVICE)
 #define E220_ADDL 0x01
 #endif
@@ -107,7 +107,7 @@
 #if defined(SENDER_DEVICE)
 #define DESTINATION_ADDL 0x01
 #elif defined(RECEIVE_DEVICE)
-#define DESTINATION_ADDL 0x03
+#define DESTINATION_ADDL 0x00
 #endif
 /**
  * @def E220_CH
@@ -147,6 +147,9 @@ void printParameters(struct Configuration configuration);
 void loop_receive_fnc_lora_e220();
 void setup_receive_fnc_lora_e220();
 
+void setup_receive_sleep();
+void loop_receive_sleep();
+
 #elif defined(SENDER_DEVICE)
 /**
  * @brief Arduino setup function for sender mode.
@@ -162,6 +165,17 @@ struct Message
   uint8_t CHAN;  // Communication channel
   char message[10];
 };
+
+typedef enum
+{
+  DEVICE_MASTER_ADDL = 0x00,  // Address Low byte for Master Device
+  //------------------------------------------------------------------
+  DEVICE_1_ADDL = 0x01,  // Address Low byte for Device 1
+  DEVICE_2_ADDL = 0x02,  // Address Low byte for Device 2
+  DEVICE_3_ADDL = 0x03,  // Address Low byte for Device 3
+  //------------------------------------------------------------------
+  DEVICE_MAX_ADDL,  // Maximum Address Low byte for devices
+} DeviceAddress;
 
 /**
  * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters
@@ -180,6 +194,7 @@ void setup()
   Serial.println(F("LoRa E220 MODE - " PRINT_MODE));
 #if defined(RECEIVE_DEVICE)
   setup_receive_fnc_lora_e220();
+  // setup_receive_sleep();  // Setup for deep sleep mode
 #elif defined(SENDER_DEVICE)
   setup_sender_fnc_lora_e220();
 #endif
@@ -192,6 +207,7 @@ void loop()
 {
 #if defined(RECEIVE_DEVICE)
   loop_receive_fnc_lora_e220();
+  // loop_receive_sleep();  // Enter deep sleep after processing
 #elif defined(SENDER_DEVICE)
   loop_sender_fnc_lora_e220();
 #endif
@@ -276,6 +292,22 @@ extern "C" void app_main()
 }
 
 #if defined(RECEIVE_DEVICE)
+
+void setup_receive_sleep()
+{
+  pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);  // Imposta il pin come input
+
+  // Set the wakeup pin
+  esp_deep_sleep_enable_gpio_wakeup(1 << AUX_WAKEUP_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+}
+
+void loop_receive_sleep()
+{
+  // Enter deep sleep mode
+  Serial.println(F("Entering deep sleep..."));
+  esp_deep_sleep_start();
+}
+
 void setup_receive_fnc_lora_e220()
 {
   // Startup all pins and UART
@@ -324,14 +356,12 @@ void setup_receive_fnc_lora_e220()
 
 void loop_receive_fnc_lora_e220()
 {
-  // If something available
+  // Se è arrivato un messaggio
   if (e220ttl.available() > 1)
   {
     Serial.println("Message received!");
 
-    // read the String message
     ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
-    // Is something goes wrong print error
     if (rc.status.code != 1)
     {
       Serial.println(rc.status.getResponseDescription());
@@ -339,7 +369,6 @@ void loop_receive_fnc_lora_e220()
     else
     {
       Message receivedMessage = *(Message*)rc.data;
-      // Print the received data
       Serial.println(rc.status.getResponseDescription());
       Serial.print("Data: ");
       Serial.println(receivedMessage.message);
@@ -350,11 +379,18 @@ void loop_receive_fnc_lora_e220()
       Serial.print("Channel: ");
       Serial.println(receivedMessage.CHAN, HEX);
 
-      // Esempio di risposta al mittente
-      Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "ACK"};
-      e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
-                               sizeof(Message));
-      Serial.println("Risposta inviata!");
+      // Se il messaggio è "TEST" rispondi "OK"
+      if (strcmp(receivedMessage.message, "TEST") == 0)
+      {
+        Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "OK"};
+        e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
+                                 sizeof(Message));
+        Serial.println("Risposta OK inviata!");
+      }
+      else
+      {
+        Serial.println("Messaggio non riconosciuto.");
+      }
     }
   }
   delay(100);
@@ -408,48 +444,95 @@ void setup_sender_fnc_lora_e220()
 
 void loop_sender_fnc_lora_e220()
 {
-  Message message = {E220_ADDH, E220_ADDL, E220_CH, "Hello"};
+  static bool testInProgress = false;
+  static int currentDevice = DEVICE_1_ADDL;
+  static unsigned long testStartTime = 0;
+  static bool deviceResponded[DEVICE_MAX_ADDL] = {false};
+  static bool testCompleted = false;
+  static bool menuShown = false;
 
-  ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, DESTINATION_ADDL, E220_CH, &message, sizeof(Message));
-
-  // Check If there is some problem of succesfully send
-  Serial.println(rs.getResponseDescription());
-
-  // Print info about the message sent
-  Serial.print("Message sent: ");
-  Serial.println(message.message);
-  Serial.print("Destination Address: ");
-  Serial.println(DESTINATION_ADDL, HEX);
-  Serial.print("Channel: ");
-  Serial.println(E220_CH, DEC);
-  delay(2000);  // Delay to avoid flooding the serial output
-
-  if (e220ttl.available() > 1)
+  // Mostra il menu solo una volta
+  if (!menuShown)
   {
-    Serial.println("Message received!");
+    Serial.println("Send 1 for test and send 2 for normal operation");
+    menuShown = true;
+  }
 
-    // read the String message
-    ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
-    // Is something goes wrong print error
-    if (rc.status.code != 1)
+  // Menù semplice via seriale
+  if (!testInProgress && Serial.available())
+  {
+    char cmd = Serial.read();
+    if (cmd == '1')
     {
-      Serial.println(rc.status.getResponseDescription());
+      Serial.println("Avvio test di tutti i device slave...");
+      testInProgress = true;
+      currentDevice = DEVICE_1_ADDL;
+      memset(deviceResponded, 0, sizeof(deviceResponded));
+      testCompleted = false;
+    }
+  }
+
+  if (testInProgress && !testCompleted)
+  {
+    if (currentDevice < DEVICE_MAX_ADDL)
+    {
+      // Invia messaggio di test al device corrente
+      Message message = {E220_ADDH, E220_ADDL, E220_CH, "TEST"};
+      ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, currentDevice, E220_CH, &message, sizeof(Message));
+      Serial.print("Test al device ADDL: ");
+      Serial.print(currentDevice, HEX);
+      Serial.print(" - ");
+      Serial.println(rs.getResponseDescription());
+      testStartTime = millis();
+
+      // Attendi risposta per max 3 secondi
+      bool rispostaRicevuta = false;
+      while (millis() - testStartTime < 3000)
+      {
+        if (e220ttl.available() > 1)
+        {
+          ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
+          if (rc.status.code == 1)
+          {
+            Message receivedMessage = *(Message*)rc.data;
+            if (strcmp(receivedMessage.message, "OK") == 0 && receivedMessage.ADDL == currentDevice)
+            {
+              rispostaRicevuta = true;
+              deviceResponded[currentDevice] = true;
+              Serial.print("Risposta OK dal device ");
+              Serial.println(currentDevice, HEX);
+              break;
+            }
+          }
+        }
+        delay(10);
+      }
+      if (!rispostaRicevuta)
+      {
+        Serial.print("Nessuna risposta dal device ");
+        Serial.println(currentDevice, HEX);
+      }
+      currentDevice++;
+      delay(200);  // Piccola pausa tra i test
     }
     else
     {
-      Message receivedMessage = *(Message*)rc.data;
-      // Print the received data
-      Serial.println(rc.status.getResponseDescription());
-      Serial.print("Data: ");
-      Serial.println(receivedMessage.message);
-      Serial.print("From ADDH: ");
-      Serial.print(receivedMessage.ADDH, HEX);
-      Serial.print(" ADDL: ");
-      Serial.println(receivedMessage.ADDL, HEX);
-      Serial.print("Channel: ");
-      Serial.println(receivedMessage.CHAN, HEX);
+      // Test completato, stampa risultati
+      Serial.println("Risultato test dispositivi:");
+      for (int i = DEVICE_1_ADDL; i < DEVICE_MAX_ADDL; i++)
+      {
+        Serial.print("Device ");
+        Serial.print(i, HEX);
+        Serial.print(": ");
+        Serial.println(deviceResponded[i] ? "OK" : "NO RESPONSE");
+      }
+      testCompleted = true;
+      testInProgress = false;
+      menuShown = false;  // Resetta il flag per mostrare il menu di nuovo
     }
-    delay(500);  // Delay to avoid flooding the serial output
   }
+  // Delay to avoid wd reset
+  //  This is important to avoid watchdog reset
+  delay(1);
 }
 #endif
