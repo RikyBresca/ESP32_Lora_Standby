@@ -19,10 +19,10 @@
 #include "esp_sleep.h"
 
 // Define the device type
-#define SENDER_DEVICE  // Uncomment this line for sender device
-#define TEST_MODE      // Uncomment this line to enable test mode for sender device
+// #define SENDER_DEVICE  // Uncomment this line for sender device
+#define TEST_MODE  // Uncomment this line to enable test mode for sender device
 
-// #define RECEIVE_DEVICE  // Uncomment this line for receiver device
+#define RECEIVE_DEVICE  // Uncomment this line for receiver device
 
 // Ensure only one device type is defined
 #if defined(SENDER_DEVICE) && defined(RECEIVE_DEVICE)
@@ -44,11 +44,6 @@
 #endif
 
 #undef ENABLE_RSSI
-/**
- * @def AUX_WAKEUP_PIN
- * @brief GPIO pin used to wake up ESP32 from deep sleep.
- */
-#define AUX_WAKEUP_PIN 0
 
 /**
  * @def ADC_PIN
@@ -72,8 +67,13 @@
  * @def E220_AUX
  * @brief GPIO pin connected to E220 AUX (for library, not for wakeup).
  */
-#define E220_AUX 10  // AUX per la libreria, NON quello di wakeup
+#define E220_AUX 0  // AUX per la libreria, NON quello di wakeup
 
+/**
+ * @def AUX_WAKEUP_PIN
+ * @brief GPIO pin used to wake up ESP32 from deep sleep.
+ */
+#define AUX_WAKEUP_PIN E220_AUX
 /**
  * @def E220_M0
  * @brief GPIO pin connected to E220 M0.
@@ -96,21 +96,9 @@
  * @def E220_ADDL
  * @brief Address Low byte for E220 module.
  */
-#if defined(SENDER_DEVICE)
-#define E220_ADDL 0x00
-#elif defined(RECEIVE_DEVICE)
 #define E220_ADDL 0x01
-#endif
 
 /**
- * @def E220_ADDH_RX
- * @brief Address High byte for receiving E220 module.
- */
-#if defined(SENDER_DEVICE)
-#define DESTINATION_ADDL 0x01
-#elif defined(RECEIVE_DEVICE)
-#define DESTINATION_ADDL 0x00
-#endif
 /**
  * @def E220_CH
  * @brief Communication channel for E220 module.
@@ -202,6 +190,16 @@ typedef enum
   DEVICE_MAX_ADDL,  // Maximum Address Low byte for devices
 } DeviceAddress;
 
+#if defined(SENDER_DEVICE) && E220_ADDL != DEVICE_MASTER_ADDL && E220_ADDL < DEVICE_1_ADDL
+#pragma error \
+    "The SENDER_DEVICE E220_ADDL must be set to DEVICE_MASTER_ADDL or a value greater than DEVICE_1_ADDL. Please change the E220_ADDL value."
+#endif
+
+#if defined(RECEIVE_DEVICE) && E220_ADDL > DEVICE_MAX_ADDL && E220_ADDL < DEVICE_1_ADDL
+#pragma error \
+    "The RECEIVE_DEVICE E220_ADDL must be set to a value between DEVICE_1_ADDL and DEVICE_MAX_ADDL. Please change the E220_ADDL value."
+#endif
+
 String device_name[DEVICE_MAX_ADDL] = {
     "Master Device", "Device Pippo", "Device Pluto", "Device Paperino",
     // Add more device names as needed
@@ -223,7 +221,7 @@ void setup()
   Serial.println(F("LoRa E220 MODE - " PRINT_MODE));
 #if defined(RECEIVE_DEVICE)
   setup_receive_fnc_lora_e220();
-  // setup_receive_sleep();  // Setup for deep sleep mode
+  setup_receive_sleep();  // Setup for deep sleep mode
 #elif defined(SENDER_DEVICE)
   setup_sender_fnc_lora_e220();
 #endif
@@ -236,7 +234,7 @@ void loop()
 {
 #if defined(RECEIVE_DEVICE)
   loop_receive_fnc_lora_e220();
-  // loop_receive_sleep();  // Enter deep sleep after processing
+  loop_receive_sleep();  // Enter deep sleep after processing
 #elif defined(SENDER_DEVICE)
   loop_sender_fnc_lora_e220();
 #endif
@@ -331,10 +329,10 @@ extern "C" void app_main()
  */
 void setup_receive_sleep()
 {
-  pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);  // Imposta il pin come input
+  pinMode(AUX_WAKEUP_PIN, INPUT_PULLDOWN);  // Imposta il pin come input
 
   // Set the wakeup pin
-  esp_deep_sleep_enable_gpio_wakeup(1 << AUX_WAKEUP_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+  esp_deep_sleep_enable_gpio_wakeup(1 << AUX_WAKEUP_PIN, ESP_GPIO_WAKEUP_GPIO_HIGH);
 }
 
 /**
@@ -344,6 +342,7 @@ void loop_receive_sleep()
 {
   // Enter deep sleep mode
   Serial.println(F("Entering deep sleep..."));
+  delay(1000);
   esp_deep_sleep_start();
 }
 
@@ -402,55 +401,64 @@ void setup_receive_fnc_lora_e220()
 void loop_receive_fnc_lora_e220()
 {
   // Se è arrivato un messaggio
-  if (e220ttl.available() > 1)
+  uint32_t loop = 0;
+  do
   {
-    Serial.println("Message received!");
-
-    ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
-    if (rc.status.code != 1)
+    if (e220ttl.available() > 1)
     {
-      Serial.println(rc.status.getResponseDescription());
-    }
-    else
-    {
-      Message receivedMessage = *(Message*)rc.data;
-      Serial.println(rc.status.getResponseDescription());
-      Serial.print("Data: ");
-      Serial.println(receivedMessage.message);
-      Serial.print("From ADDH: ");
-      Serial.print(receivedMessage.ADDH, HEX);
-      Serial.print(" ADDL: ");
-      Serial.println(receivedMessage.ADDL, HEX);
-      Serial.print("Channel: ");
-      Serial.println(receivedMessage.CHAN, HEX);
+      Serial.println("Message received!");
 
-      // Se il messaggio è "TEST" rispondi "OK"
-      /**
-       * @brief Handles incoming "TEST" messages.
-       *
-       * If a message with content "TEST" is received, this block sends back an "OK" response
-       * to the sender using the same addressing and channel information.
-       */
-      if (strcmp(receivedMessage.message, "TEST") == 0)
+      ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
+      if (rc.status.code != 1)
       {
-        Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "OK"};
-        e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
-                                 sizeof(Message));
-        Serial.println("OK response sent!");
+        Serial.println(rc.status.getResponseDescription());
       }
       else
       {
+        Message receivedMessage = *(Message*)rc.data;
+        Serial.println(rc.status.getResponseDescription());
+        Serial.print("Data: ");
+        Serial.println(receivedMessage.message);
+        Serial.print("From ADDH: ");
+        Serial.print(receivedMessage.ADDH, HEX);
+        Serial.print(" ADDL: ");
+        Serial.println(receivedMessage.ADDL, HEX);
+        Serial.print("Channel: ");
+        Serial.println(receivedMessage.CHAN, HEX);
+
+        // Se il messaggio è "TEST" rispondi "OK"
         /**
-         * @brief Handles unrecognized messages.
+         * @brief Handles incoming "TEST" messages.
          *
-         * If the received message does not match the expected "TEST" string,
-         * this block prints a notification that the message is not recognized.
+         * If a message with content "TEST" is received, this block sends back an "OK" response
+         * to the sender using the same addressing and channel information.
          */
-        Serial.println("Unrecognized message.");
+        if (strcmp(receivedMessage.message, "TEST") == 0)
+        {
+          Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "OK"};
+          e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
+                                   sizeof(Message));
+          Serial.println("OK response sent!");
+          break;  // Exit the loop after sending the response
+        }
+        else
+        {
+          /**
+           * @brief Handles unrecognized messages.
+           *
+           * If the received message does not match the expected "TEST" string,
+           * this block prints a notification that the message is not recognized.
+           */
+          Serial.println("Unrecognized message.");
+        }
       }
     }
-  }
-  delay(100);
+    delay(100);
+    loop++;
+    Serial.println("Waiting for messages...");
+    Serial.print("Loop count: ");
+    Serial.println(loop);
+  } while (loop < 100);
 }
 
 #elif defined(SENDER_DEVICE)
