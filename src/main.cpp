@@ -9,7 +9,7 @@
 
 // Frequency band definition
 //  Uncomment the following line to use the 433 MHz frequency band
-#define FREQUENCY_868
+// #define FREQUENCY_868
 
 #include <Arduino.h>
 #include <sdkconfig.h>
@@ -18,8 +18,8 @@
 #include "esp_sleep.h"
 
 // Define the device type
-#undef SENDER_DEVICE    // Uncomment this line for sender device
-#define RECEIVE_DEVICE  // Uncomment this line for receiver device
+#define SENDER_DEVICE  // Uncomment this line for sender device
+// #define RECEIVE_DEVICE  // Uncomment this line for receiver device
 
 // Ensure only one device type is defined
 #if defined(SENDER_DEVICE) && defined(RECEIVE_DEVICE)
@@ -282,7 +282,7 @@ void setup_receive_fnc_lora_e220()
   configuration.ADDL = E220_ADDL;  // First part of address
   configuration.ADDH = 0x00;       // Second part
 
-  configuration.CHAN = 23;  // Communication channel
+  configuration.CHAN = E220_CH;  // Communication channel
 
   configuration.SPED.uartBaudRate = UART_BPS_9600;        // Serial baud rate
   configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;  // Air baud rate
@@ -341,6 +341,7 @@ void loop_receive_fnc_lora_e220()
 #endif
     }
   }
+  delay(100);
 }
 
 #elif defined(SENDER_DEVICE)
@@ -360,7 +361,7 @@ void setup_sender_fnc_lora_e220()
   configuration.ADDL = E220_ADDL;  // First part of address
   configuration.ADDH = 0x00;       // Second part
 
-  configuration.CHAN = 23;  // Communication channel
+  configuration.CHAN = E220_CH;  // Communication channel
 
   configuration.SPED.uartBaudRate = UART_BPS_9600;        // Serial baud rate
   configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;  // Air baud rate
@@ -395,6 +396,15 @@ void loop_sender_fnc_lora_e220()
   ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, E220_CH, input);
   // Check If there is some problem of succesfully send
   Serial.println(rs.getResponseDescription());
-  delay(2000);  // Delay to avoid flooding the serial output
+
+  // Print info about the message sent
+  Serial.print("Message sent: ");
+  Serial.println(input);
+  Serial.print("Destination Address: ");
+  Serial.println(DESTINATION_ADDL, HEX);
+  Serial.print("Channel: ");
+  Serial.println(E220_CH, DEC);
+
+  delay(1000);  // Delay to avoid flooding the serial output
 }
 #endif
