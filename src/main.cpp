@@ -351,8 +351,9 @@ void loop_receive_fnc_lora_e220()
       Serial.println(receivedMessage.CHAN, HEX);
 
       // Esempio di risposta al mittente
-      String risposta = "ACK";
-      e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, risposta);
+      Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "ACK"};
+      e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
+                               sizeof(Message));
       Serial.println("Risposta inviata!");
     }
   }
@@ -409,7 +410,7 @@ void loop_sender_fnc_lora_e220()
 {
   Message message = {E220_ADDH, E220_ADDL, E220_CH, "Hello"};
 
-  ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, DESTINATION_ADDL, E220_CH, &message, sizeof(message));
+  ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, DESTINATION_ADDL, E220_CH, &message, sizeof(Message));
 
   // Check If there is some problem of succesfully send
   Serial.println(rs.getResponseDescription());
@@ -421,14 +422,14 @@ void loop_sender_fnc_lora_e220()
   Serial.println(DESTINATION_ADDL, HEX);
   Serial.print("Channel: ");
   Serial.println(E220_CH, DEC);
-  delay(500);  // Delay to avoid flooding the serial output
+  delay(2000);  // Delay to avoid flooding the serial output
 
   if (e220ttl.available() > 1)
   {
     Serial.println("Message received!");
 
     // read the String message
-    ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(message));
+    ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
     // Is something goes wrong print error
     if (rc.status.code != 1)
     {
