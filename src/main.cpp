@@ -191,8 +191,7 @@ typedef enum
 } DeviceAddress;
 
 #if defined(SENDER_DEVICE) && E220_ADDL != DEVICE_MASTER_ADDL && E220_ADDL < DEVICE_1_ADDL
-#pragma error \
-    "The SENDER_DEVICE E220_ADDL must be set to DEVICE_MASTER_ADDL or a value greater than DEVICE_1_ADDL. Please change the E220_ADDL value."
+#pragma error "The SENDER_DEVICE E220_ADDL must be set to DEVICE_MASTER_ADDL"
 #endif
 
 #if defined(RECEIVE_DEVICE) && E220_ADDL > DEVICE_MAX_ADDL && E220_ADDL < DEVICE_1_ADDL
