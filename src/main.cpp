@@ -20,6 +20,8 @@
 
 // Define the device type
 #define SENDER_DEVICE  // Uncomment this line for sender device
+#define TEST_MODE      // Uncomment this line to enable test mode for sender device
+
 // #define RECEIVE_DEVICE  // Uncomment this line for receiver device
 
 // Ensure only one device type is defined
@@ -123,6 +125,8 @@
  */
 #define MESSAGE_TO_CHECK "START 1"
 
+#define TEST_TIME_OUT (3000)
+
 /**
  * @brief LoRa E220 module instance.
  */
@@ -135,27 +139,48 @@ void print_wakeup_reason();
 
 /**
  * @brief Prints the parameters of the E220 module configuration.
- *
  * @param configuration The configuration structure to print.
  */
 void printParameters(struct Configuration configuration);
 
 #if defined(RECEIVE_DEVICE)
 /**
- * @brief Arduino setup function for receiving mode.
+ * @brief Main loop function for receiving mode.
  */
 void loop_receive_fnc_lora_e220();
+
+/**
+ * @brief Setup function for receiving mode.
+ */
 void setup_receive_fnc_lora_e220();
 
+/**
+ * @brief Setup function for deep sleep in receive mode.
+ */
 void setup_receive_sleep();
+
+/**
+ * @brief Loop function for deep sleep in receive mode.
+ */
 void loop_receive_sleep();
 
 #elif defined(SENDER_DEVICE)
 /**
- * @brief Arduino setup function for sender mode.
+ * @brief Main loop function for sender mode.
  */
 void loop_sender_fnc_lora_e220();
+
+/**
+ * @brief Setup function for sender mode.
+ */
 void setup_sender_fnc_lora_e220();
+
+#if defined(TEST_MODE)
+/**
+ * @brief Handles the testing process for all slave devices connected via Lora E220.
+ */
+void test_sender_fnc_lora_e220();
+#endif
 #endif
 
 struct Message
@@ -177,9 +202,13 @@ typedef enum
   DEVICE_MAX_ADDL,  // Maximum Address Low byte for devices
 } DeviceAddress;
 
+String device_name[DEVICE_MAX_ADDL] = {
+    "Master Device", "Device Pippo", "Device Pluto", "Device Paperino",
+    // Add more device names as needed
+};
+
 /**
- * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters
- * deep sleep.
+ * @brief Arduino setup function. Initializes serial, configures pins, handles wakeup, and enters deep sleep.
  */
 void setup()
 {
@@ -201,7 +230,7 @@ void setup()
 }
 
 /**
- * @brief Arduino loop function. Not used in this example.
+ * @brief Arduino loop function. Main application loop.
  */
 void loop()
 {
@@ -213,6 +242,10 @@ void loop()
 #endif
 }
 
+/**
+ * @brief Prints the parameters of the E220 module configuration.
+ * @param configuration The configuration structure to print.
+ */
 void printParameters(struct Configuration configuration)
 {
   Serial.println("----------------------------------------");
@@ -293,6 +326,9 @@ extern "C" void app_main()
 
 #if defined(RECEIVE_DEVICE)
 
+/**
+ * @brief Setup function for deep sleep in receive mode.
+ */
 void setup_receive_sleep()
 {
   pinMode(AUX_WAKEUP_PIN, INPUT_PULLUP);  // Imposta il pin come input
@@ -301,6 +337,9 @@ void setup_receive_sleep()
   esp_deep_sleep_enable_gpio_wakeup(1 << AUX_WAKEUP_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
 }
 
+/**
+ * @brief Loop function for deep sleep in receive mode.
+ */
 void loop_receive_sleep()
 {
   // Enter deep sleep mode
@@ -308,6 +347,9 @@ void loop_receive_sleep()
   esp_deep_sleep_start();
 }
 
+/**
+ * @brief Setup function for LoRa E220 in receive mode.
+ */
 void setup_receive_fnc_lora_e220()
 {
   // Startup all pins and UART
@@ -354,6 +396,9 @@ void setup_receive_fnc_lora_e220()
   Serial.println("Ready to receive data on LoRa E220 module.");
 }
 
+/**
+ * @brief Main loop function for LoRa E220 in receive mode.
+ */
 void loop_receive_fnc_lora_e220()
 {
   // Se è arrivato un messaggio
@@ -380,16 +425,28 @@ void loop_receive_fnc_lora_e220()
       Serial.println(receivedMessage.CHAN, HEX);
 
       // Se il messaggio è "TEST" rispondi "OK"
+      /**
+       * @brief Handles incoming "TEST" messages.
+       *
+       * If a message with content "TEST" is received, this block sends back an "OK" response
+       * to the sender using the same addressing and channel information.
+       */
       if (strcmp(receivedMessage.message, "TEST") == 0)
       {
         Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "OK"};
         e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
                                  sizeof(Message));
-        Serial.println("Risposta OK inviata!");
+        Serial.println("OK response sent!");
       }
       else
       {
-        Serial.println("Messaggio non riconosciuto.");
+        /**
+         * @brief Handles unrecognized messages.
+         *
+         * If the received message does not match the expected "TEST" string,
+         * this block prints a notification that the message is not recognized.
+         */
+        Serial.println("Unrecognized message.");
       }
     }
   }
@@ -397,6 +454,9 @@ void loop_receive_fnc_lora_e220()
 }
 
 #elif defined(SENDER_DEVICE)
+/**
+ * @brief Setup function for LoRa E220 in sender mode.
+ */
 void setup_sender_fnc_lora_e220()
 {
   // Startup all pins and UART
@@ -442,7 +502,46 @@ void setup_sender_fnc_lora_e220()
   Serial.println("Ready to send data on LoRa E220 module.");
 }
 
+/**
+ * @brief Main loop function for LoRa E220 in sender mode.
+ */
 void loop_sender_fnc_lora_e220()
+{
+
+#if defined(TEST_MODE)
+  test_sender_fnc_lora_e220();
+#endif
+  // Delay to avoid wd reset
+  //  This is important to avoid watchdog reset
+  delay(1);
+}
+
+/**
+ * @brief Handles the testing process for all slave devices connected via Lora E220.
+ *
+ * This function provides a simple serial menu to initiate a test sequence or return to normal operation.
+ * When the test is started, it sends a test message ("TEST") to each slave device in sequence and waits
+ * for a response ("OK") from each. The response status for each device is tracked and, upon completion,
+ * a summary of the results is printed to the serial monitor, indicating which devices responded and which did not.
+ *
+ * The function uses static variables to maintain state across calls, allowing it to be called repeatedly
+ * (e.g., from the main loop) without losing progress.
+ *
+ * User interaction:
+ * - Sends a menu prompt via Serial.
+ * - Waits for user input ('1' to start the test).
+ * - Displays test results for each device after completion.
+ *
+ * Communication:
+ * - Sends a fixed message to each device.
+ * - Waits up to TEST_TIME_OUT milliseconds for a response.
+ * - Marks devices as "OK" if a valid response is received, otherwise as "NO RESPONSE".
+ *
+ * @note This function is designed to be called repeatedly, such as from the main loop.
+ * @note Relies on global variables/constants: DEVICE_1_ADDL, DEVICE_MAX_ADDL, device_name, E220_ADDH, E220_ADDL,
+ * E220_CH, TEST_TIME_OUT, e220ttl.
+ */
+void test_sender_fnc_lora_e220()
 {
   static bool testInProgress = false;
   static int currentDevice = DEVICE_1_ADDL;
@@ -487,7 +586,7 @@ void loop_sender_fnc_lora_e220()
 
       // Attendi risposta per max 3 secondi
       bool rispostaRicevuta = false;
-      while (millis() - testStartTime < 3000)
+      while (millis() - testStartTime < TEST_TIME_OUT)
       {
         if (e220ttl.available() > 1)
         {
@@ -499,7 +598,7 @@ void loop_sender_fnc_lora_e220()
             {
               rispostaRicevuta = true;
               deviceResponded[currentDevice] = true;
-              Serial.print("Risposta OK dal device ");
+              Serial.print("Response received from device OK");
               Serial.println(currentDevice, HEX);
               break;
             }
@@ -507,22 +606,29 @@ void loop_sender_fnc_lora_e220()
         }
         delay(10);
       }
+      /// @brief If no response is received from the current device, print a message.
       if (!rispostaRicevuta)
       {
-        Serial.print("Nessuna risposta dal device ");
+        Serial.print("No response from device ");
         Serial.println(currentDevice, HEX);
       }
       currentDevice++;
-      delay(200);  // Piccola pausa tra i test
+      delay(200);  // Small pause between tests
     }
     else
     {
-      // Test completato, stampa risultati
-      Serial.println("Risultato test dispositivi:");
+      /**
+       * @brief Test completed: print the results for all devices.
+       * Iterates through all slave devices and prints whether each device responded ("OK")
+       * or did not respond ("NO RESPONSE").
+       */
+      Serial.println("Device test results:");
       for (int i = DEVICE_1_ADDL; i < DEVICE_MAX_ADDL; i++)
       {
         Serial.print("Device ");
         Serial.print(i, HEX);
+        Serial.print("-> ");
+        Serial.print(device_name[i].c_str());
         Serial.print(": ");
         Serial.println(deviceResponded[i] ? "OK" : "NO RESPONSE");
       }
@@ -531,8 +637,5 @@ void loop_sender_fnc_lora_e220()
       menuShown = false;  // Resetta il flag per mostrare il menu di nuovo
     }
   }
-  // Delay to avoid wd reset
-  //  This is important to avoid watchdog reset
-  delay(1);
 }
 #endif
