@@ -20,10 +20,10 @@
 
 // Define the device type
 #define SENDER_DEVICE  // Uncomment this line for sender device
-// #define TEST_MODE  // Uncomment this line to enable test mode for sender device
+#define TEST_MODE      // Uncomment this line to enable test mode for sender device
 
-#define RECEIVE_DEVICE  // Uncomment this line for receiver device
-// #define ENABLE_SLEEP  // Uncomment this line to enable deep sleep functionality
+// #define RECEIVE_DEVICE  // Uncomment this line for receiver device
+//  #define ENABLE_SLEEP  // Uncomment this line to enable deep sleep functionality
 
 // Ensure only one device type is defined
 #if defined(SENDER_DEVICE) && defined(RECEIVE_DEVICE)
@@ -468,6 +468,10 @@ void loop_receive_fnc_lora_e220()
           digitalWrite(OUTPUT_PIN, HIGH);
           delay(1000);                    // Keep the pin high for 1 second
           digitalWrite(OUTPUT_PIN, LOW);  // Set pin back to low
+
+          Message sendMessage = {E220_ADDH, E220_ADDL, E220_CH, "OK"};
+          e220ttl.sendFixedMessage(receivedMessage.ADDH, receivedMessage.ADDL, receivedMessage.CHAN, &sendMessage,
+                                   sizeof(Message));
         }
 
         else
@@ -605,6 +609,69 @@ void test_sender_fnc_lora_e220()
       currentDevice = DEVICE_1_ADDL;
       memset(deviceResponded, 0, sizeof(deviceResponded));
       testCompleted = false;
+    }
+    else if (cmd == '2')
+    {
+      Serial.print("Scegli il DEVICE a cui inviare START1 (da ");
+      Serial.print(DEVICE_1_ADDL);
+      Serial.print(" a ");
+      Serial.print(DEVICE_MAX_ADDL - 1);
+      Serial.println("): ");
+
+      while (Serial.available() == 0)
+      {
+        // Attendi input
+        delay(10);
+      }
+      String input = Serial.readStringUntil('\n');
+      int deviceChoice = input.toInt();
+
+      if (deviceChoice >= DEVICE_1_ADDL && deviceChoice < DEVICE_MAX_ADDL)
+      {
+        // Invia il messaggio START1 al device scelto
+        Message message = {E220_ADDH, E220_ADDL, E220_CH, "START 1"};
+        ResponseStatus rs = e220ttl.sendFixedMessage(E220_ADDH, deviceChoice, E220_CH, &message, sizeof(Message));
+        Serial.print("Test al device ADDL: ");
+        Serial.print(currentDevice, HEX);
+        Serial.print(" - ");
+        Serial.println(rs.getResponseDescription());
+        testStartTime = millis();
+
+        bool rispostaRicevuta = false;
+        while (millis() - testStartTime < TEST_TIME_OUT)
+        {
+          if (e220ttl.available() > 1)
+          {
+            ResponseStructContainer rc = e220ttl.receiveMessage(sizeof(Message));
+            if (rc.status.code == 1)
+            {
+              Message receivedMessage = *(Message*)rc.data;
+              if (strcmp(receivedMessage.message, "OK") == 0 && receivedMessage.ADDL == currentDevice)
+              {
+                rispostaRicevuta = true;
+                deviceResponded[currentDevice] = true;
+                Serial.print("Response received from device OK");
+                Serial.println(currentDevice, HEX);
+                break;
+              }
+            }
+          }
+        }
+
+        if (!rispostaRicevuta)
+        {
+          Serial.print("No response from device ");
+          Serial.println(currentDevice, HEX);
+        }
+      }
+      else
+      {
+        Serial.println("Scelta non valida.");
+      }
+    }
+    else
+    {
+      Serial.println("Comando non riconosciuto. Invia 1 per test o 2 per operazione normale.");
     }
   }
 
