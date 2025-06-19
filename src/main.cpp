@@ -19,8 +19,8 @@
 #include "esp_sleep.h"
 
 // Define the device type
-// #define SENDER_DEVICE  // Uncomment this line for sender device
-#define TEST_MODE  // Uncomment this line to enable test mode for sender device
+#define SENDER_DEVICE  // Uncomment this line for sender device
+// #define TEST_MODE  // Uncomment this line to enable test mode for sender device
 
 #define RECEIVE_DEVICE  // Uncomment this line for receiver device
 // #define ENABLE_SLEEP  // Uncomment this line to enable deep sleep functionality
@@ -51,6 +51,12 @@
  * @brief GPIO pin used for ADC voltage reading.
  */
 #define ADC_PIN 4
+
+/**
+ * @def OUTPUT_PIN
+ * @brief GPIO pin used for active output (e.g., LED).
+ */
+#define OUTPUT_PIN 3
 
 /**
  * @def E220_TX
@@ -99,7 +105,6 @@
  */
 #define E220_ADDL 0x01
 
-/**
 /**
  * @def E220_CH
  * @brief Communication channel for E220 module.
@@ -212,7 +217,13 @@ void setup()
 {
   Serial.begin(115200);
 
-  delay(2500); //Delay for serial not lockin.
+  delay(2500);  // Delay for serial not lockin.
+
+  // Set output pin for output
+  Serial.println(F("Setting up output pin..."));
+  pinMode(OUTPUT_PIN, OUTPUT);
+  Serial.print(F("Output pin set to: "));
+  Serial.println(OUTPUT_PIN);
 
   Serial.println(F("LoRa E220 MODE - " PRINT_MODE));
 #if defined(RECEIVE_DEVICE)
@@ -441,6 +452,24 @@ void loop_receive_fnc_lora_e220()
           Serial.println("OK response sent!");
           break;  // Exit the loop after sending the response
         }
+        else if (strcmp(receivedMessage.message, "START 1") == 0)
+        {
+          /**
+           * @brief Handles incoming "START 1" messages.
+           *
+           * If a message with content "START 1" is received, this block prints a notification
+           * and can be extended to perform additional actions as needed.
+           */
+          Serial.println("Received START 1 command.");
+          // Here you can add code to handle the START command
+
+          // Set pin has high to indicate activity
+          Serial.println("Setting output pin HIGH for 1 second...");
+          digitalWrite(OUTPUT_PIN, HIGH);
+          delay(1000);                    // Keep the pin high for 1 second
+          digitalWrite(OUTPUT_PIN, LOW);  // Set pin back to low
+        }
+
         else
         {
           /**
