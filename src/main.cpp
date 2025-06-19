@@ -212,11 +212,7 @@ void setup()
 {
   Serial.begin(115200);
 
-  // communication
-  while (!Serial)
-  {
-    ;
-  }
+  delay(2500); //Delay for serial not lockin.
 
   Serial.println(F("LoRa E220 MODE - " PRINT_MODE));
 #if defined(RECEIVE_DEVICE)
